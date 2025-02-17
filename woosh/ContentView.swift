@@ -1,61 +1,75 @@
-//
-//  ContentView.swift
-//  woosh
-//
-//  Created by Abdelmonem Shaker on 14/02/2025.
-//
-
 import SwiftUI
-import SwiftData
+import WatchConnectivity
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
-
+    // State for login status and watch pairing
+    @State private var isLoggedIn = true // Assume logged in for now
+    @StateObject private var watchPairingManager = WatchPairingManager()
+    
     var body: some View {
-        NavigationSplitView {
+        NavigationView {
             List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+                // Login Status Section
+                Section {
+                    NavigationLink(destination: LoginView(isLoggedIn: $isLoggedIn)) {
+                        HStack {
+                            Text("Account")
+                            Spacer()
+                            if isLoggedIn {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            }
+                        }
                     }
                 }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
+                
+                // Device Status Section
+                Section(header: Text("Device Status")) {
+                    HStack {
+                        Text("Apple Watch Status")
+                        Spacer()
+                        Text(watchPairingManager.isWatchPaired ? "Paired ✅" : "Not Paired ❌")
+                            .foregroundColor(.gray)
+                    }
                 }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
+                
+                // Navigation Links
+                Section {
+                    NavigationLink(destination: SettingsView()) {
+                        Text("Settings")
+                    }
+                    
+                    NavigationLink(destination: InstructionsView()) {
+                        Text("Instructions")
                     }
                 }
             }
-        } detail: {
-            Text("Select an item")
+            .navigationTitle("woosh")
+            .listStyle(.insetGrouped)
         }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
-        }
+        .navigationViewStyle(.stack)
     }
 }
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
+// Watch Pairing Manager
+class WatchPairingManager: NSObject, ObservableObject, WCSessionDelegate {
+    @Published var isWatchPaired = false
+    
+    override init() {
+        super.init()
+        if WCSession.isSupported() {
+            let session = WCSession.default
+            session.delegate = self
+            session.activate()
+        }
+    }
+    
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        DispatchQueue.main.async {
+            self.isWatchPaired = (activationState == .activated) && session.isPaired
+        }
+    }
+    
+    func sessionDidBecomeInactive(_ session: WCSession) {}
+    func sessionDidDeactivate(_ session: WCSession) {}
 }
